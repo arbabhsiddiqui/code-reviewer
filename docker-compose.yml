@@ -1,0 +1,83 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: codereview_node_dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - pnpm-store:/pnpm/store
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://admin:admin@postgres:5432/codereview_db
+      REDIS_URL: redis://redis:6379
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+    command: tail -f /dev/null
+
+  postgres:
+    image: postgres:17
+    container_name: codereview_postgres_db
+    restart: unless-stopped
+    ports:
+      - "5445:5432" # Changed to 5445 to prevent conflict
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: codereview_db
+    volumes:
+      - pgdata_codereview:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d codereview_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: codereview_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379" # Changed to 6380 to prevent conflict
+    volumes:
+      - redisdata_codereview:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: codereview_mailpit
+    restart: unless-stopped
+    ports:
+      - "8027:8025" # Changed to 8027 to prevent conflict
+      - "1027:1025" # Changed to 1027 to prevent conflict
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_DATABASE: ""
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  pgdata_codereview:
+  redisdata_codereview:
+  pnpm-store:
